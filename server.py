@@ -3,87 +3,101 @@
 
 import sys
 import uuid
-from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+from fastmcp.dependencies import CurrentContext
+from fastmcp.server.lifespan import Lifespan
 from python_on_whales import DockerClient
 
-SESSIONS: dict[str, str] = {}
-client = DockerClient(client_call=sys.argv[1:] or ["docker"])
+VOLUMES: dict[uuid.UUID, str] = {}
+client = DockerClient(
+    client_call=sys.argv[1:] or ["docker"]
+)  # TODO document this arg / error if its not passed
 
 
-@asynccontextmanager
-async def lifespan(server):
+# This cleans up the anonymous volumes created during the runtime of the mcp server
+@Lifespan
+async def remove_sessions(_):
+    # startup
     yield
-    for vol in SESSIONS.values():
+
+    # shutdown
+    for vol in VOLUMES.values():
         try:
             client.volume.remove(vol)
         except Exception:
             pass
 
 
-mcp = FastMCP("mcp-cmd-sandbox", lifespan=lifespan)
+def get_session_volume(ctx: Context):
+    id = uuid.uuid5(uuid.uuid4(), ctx.session_id)
+    volume_name = f"mcp-cmd-sandbox-persistant-{id}"
+
+    if id not in VOLUMES.keys():
+        _ = client.volume.create(volume_name)
+        VOLUMES[id] = volume_name
+
+    return volume_name
 
 
-def _session(sid: str | None = None) -> str:
-    if not sid:
-        sid = uuid.uuid4().hex[:12]
-    if sid not in SESSIONS:
-        vol = f"mcp-sandbox-{sid}"
-        client.volume.create(vol)
-        SESSIONS[sid] = vol
-    return sid
+mcp = FastMCP("mcp-cmd-sandbox", lifespan=remove_sessions)
 
 
-def _run(command: str, image: str, session_id: str | None, writable: bool) -> str:
-    sid = _session(session_id)
-    vol = SESSIONS[sid]
-    cwd = str(Path.cwd())
+def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
+    volume = get_session_volume(ctx)
     mode = "rw" if writable else "ro"
+
+    # TODO: this is sketchy af.
+    # this should be the pwd of the agent tool, not the mcp server
+    cwd = str(Path.cwd())
 
     try:
         output = client.run(
             image,
-            ["sh", "-c", command],
-            volumes=[(cwd, "/workspace", mode), (vol, "/persistent", "rw")],
+            command,
+            volumes=[(cwd, "/workspace", mode), (volume, "/persistent", "rw")],
             workdir="/workspace",
-            user="1000:1000",
+            user="1000:1000",  # TODO this is cooked because the mounted workdir might not work
             remove=True,
-            stream=False,
         )
-        return f"{output}\n[session: {sid}]"
+        return f"{output}"
+
     except Exception as e:
         return f"Error: {e}"
 
 
 @mcp.tool()
-def execute(command: str, image: str = "debian:latest", session_id: str | None = None) -> str:
+def execute(
+    command: str, image: str = "debian:latest", ctx: Context = CurrentContext()
+) -> str:
     """Run a command in an isolated container.
 
     - /workspace: your project directory (READ-ONLY)
     - /persistent: writable volume that survives across calls within the same session_id
 
     Pick an image appropriate for the task:
-      debian:latest (default, general purpose), alpine:latest (minimal),
-      rust:latest, python:3.12-slim, node:22-alpine, golang:latest,
-      gcc:latest, eclipse-temurin:21, maven:latest, nixos/nix:latest
+      debian:latest (default), rust:latest, python:3.12-slim,
+      gcc:latest, node:22-alpine, golang:latest, maven:latest
 
-    Use session_id to persist build caches or artifacts in /persistent across multiple calls.
+    Use /persistent for build caches or artifacts across multiple calls.
+    See the execute_writeable call for a writeable workspace.
     """
-    return _run(command, image, session_id, writable=False)
+    return _run_cmd(command, image, writable=False, ctx=ctx)
 
 
 @mcp.tool()
-def execute_writable(command: str, image: str = "debian:latest", session_id: str | None = None) -> str:
-    """Run a command with WRITE access to /workspace (the host project directory).
+def execute_writable(
+    command: str, image: str = "debian:latest", ctx: Context = CurrentContext()
+) -> str:
+    """Run a command with write access to /workspace in an isolated container.
 
     Only use this when you need to modify files on the host (sed -i, patch, writing build output, etc.).
     Prefer the read-only 'execute' tool unless modification is required.
 
-    Same image and session_id options as execute.
+    Same options as the execute mcp call.
     """
-    return _run(command, image, session_id, writable=True)
+    return _run_cmd(command, image, writable=True, ctx=ctx)
 
 
 if __name__ == "__main__":
