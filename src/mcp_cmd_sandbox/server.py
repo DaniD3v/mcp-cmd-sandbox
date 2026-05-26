@@ -1,5 +1,6 @@
 """MCP server for isolated container execution via Docker/Podman."""
 
+import argparse
 import sys
 import uuid
 from pathlib import Path
@@ -9,11 +10,18 @@ from fastmcp.dependencies import CurrentContext
 from fastmcp.server.lifespan import Lifespan
 from python_on_whales import DockerClient
 
+_parser = argparse.ArgumentParser(prog="mcp-cmd-sandbox")
+_ = _parser.add_argument(
+    "container_binary",
+    nargs="*",
+    default=["docker"],
+    help="e.g. 'docker' or '-- podman --remote'",
+)
+_args = _parser.parse_args()
+
 _SERVER_ID = uuid.uuid4()
 VOLUMES: dict[uuid.UUID, str] = {}
-client = DockerClient(
-    client_call=sys.argv[1:] or ["docker"]
-)  # TODO document this arg / error if its not passed
+client = DockerClient(client_call=_args.container_binary)
 
 
 # This cleans up the anonymous volumes created during the runtime of the mcp server
