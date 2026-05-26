@@ -52,18 +52,15 @@ def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
     # this should be the pwd of the agent tool, not the mcp server
     cwd = str(Path.cwd())
 
-    try:
-        output = client.run(
-            image,
-            ["sh", "-c", command],
-            volumes=[(cwd, "/workspace", mode), (volume, "/persistent", "rw")],
-            workdir="/workspace",
-            remove=True,
-        )
-        return f"{output}"
-
-    except Exception as e:
-        return f"Error: {e}"  # TODO: fix to show stderr instead of exception
+    with client.run(
+        image,
+        ["sh", "-c", command],
+        volumes=[(cwd, "/workspace", mode), (volume, "/persistent", "rw")],
+        workdir="/workspace",
+        detach=True,
+    ) as container:
+        client.container.wait(container)
+        return container.logs()
 
 
 @mcp.tool()
