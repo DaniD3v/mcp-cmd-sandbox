@@ -14,13 +14,15 @@ _parser = argparse.ArgumentParser(prog="mcp-cmd-sandbox")
 _ = _parser.add_argument(
     "container_binary",
     nargs="*",
-    default=["docker"],
-    help="e.g. 'docker' or '-- podman --remote'",
+    default=["podman"],
+    help="e.g. 'podman' or '-- docker --remote'",
 )
 _args = _parser.parse_args()
 
 _SERVER_ID = uuid.uuid4()
-VOLUMES: dict[uuid.UUID, str] = {}
+_IS_PODMAN = "podman" in _args.container_binary[0]
+
+volumes: dict[uuid.UUID, str] = {}
 client = DockerClient(client_call=_args.container_binary)
 
 
@@ -31,7 +33,7 @@ async def remove_sessions(_):
     yield
 
     # shutdown
-    for vol in VOLUMES.values():
+    for vol in volumes.values():
         try:
             client.volume.remove(vol)
         except Exception:
@@ -42,9 +44,9 @@ def get_session_volume(ctx: Context):
     id = uuid.uuid5(_SERVER_ID, ctx.session_id)
     volume_name = f"mcp-cmd-sandbox-persistant-{id}"
 
-    if id not in VOLUMES.keys():
+    if id not in volumes.keys():
         _ = client.volume.create(volume_name)
-        VOLUMES[id] = volume_name
+        volumes[id] = volume_name
 
     return volume_name
 
@@ -54,8 +56,6 @@ mcp = FastMCP("mcp-cmd-sandbox", lifespan=remove_sessions)
 
 def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
     volume = get_session_volume(ctx)
-    mode = "rw" if writable else "ro"
-
     # TODO: this is sketchy af.
     # this should be the pwd of the agent tool, not the mcp server
     cwd = str(Path.cwd())
@@ -63,7 +63,10 @@ def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
     with client.run(
         image,
         ["sh", "-c", command],
-        volumes=[(cwd, "/workspace", mode), (volume, "/persistent", "rw")],
+        volumes=[
+            (cwd, "/workspace", "rw" if writable else ("O" if _IS_PODMAN else "ro")),
+            (volume, "/persistent", "rw"),
+        ],
         workdir="/workspace",
         detach=True,
     ) as container:
@@ -71,22 +74,24 @@ def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
         return container.logs()
 
 
-@mcp.tool()
+@mcp.tool(
+    description=f"""
+        Run a command in an isolated container.
+
+        - /workspace: your project directory ({"overlay mount, writes discarded on exit" if _IS_PODMAN else "read-only"})
+        - /persistent: writable volume that survives across calls within the same session_id
+
+        Pick an image appropriate for the task:
+          debian:latest (default), rust:latest, python:3.12-slim,
+          gcc:latest, node:22-alpine, golang:latest, maven:latest
+
+        Use /persistent for build caches or artifacts across multiple calls.
+        See the execute_writable call for a writable workspace.
+    """
+)
 def execute(
     command: str, image: str = "debian:latest", ctx: Context = CurrentContext()
 ) -> str:
-    """Run a command in an isolated container.
-
-    - /workspace: your project directory (READ-ONLY, working directory)
-    - /persistent: writable volume that survives across calls within the same session_id
-
-    Pick an image appropriate for the task:
-      debian:latest (default), rust:latest, python:3.12-slim,
-      gcc:latest, node:22-alpine, golang:latest, maven:latest
-
-    Use /persistent for build caches or artifacts across multiple calls.
-    See the execute_writeable call for a writeable workspace.
-    """
     return _run_cmd(command, image, writable=False, ctx=ctx)
 
 
