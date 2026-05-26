@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """MCP server for isolated container execution via Docker/Podman."""
 
 import sys
@@ -10,6 +9,7 @@ from fastmcp.dependencies import CurrentContext
 from fastmcp.server.lifespan import Lifespan
 from python_on_whales import DockerClient
 
+_SERVER_ID = uuid.uuid4()
 VOLUMES: dict[uuid.UUID, str] = {}
 client = DockerClient(
     client_call=sys.argv[1:] or ["docker"]
@@ -31,7 +31,7 @@ async def remove_sessions(_):
 
 
 def get_session_volume(ctx: Context):
-    id = uuid.uuid5(uuid.uuid4(), ctx.session_id)
+    id = uuid.uuid5(_SERVER_ID, ctx.session_id)
     volume_name = f"mcp-cmd-sandbox-persistant-{id}"
 
     if id not in VOLUMES.keys():
@@ -55,16 +55,15 @@ def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
     try:
         output = client.run(
             image,
-            command,
+            ["sh", "-c", command],
             volumes=[(cwd, "/workspace", mode), (volume, "/persistent", "rw")],
             workdir="/workspace",
-            user="1000:1000",  # TODO this is cooked because the mounted workdir might not work
             remove=True,
         )
         return f"{output}"
 
     except Exception as e:
-        return f"Error: {e}"
+        return f"Error: {e}"  # TODO: fix to show stderr instead of exception
 
 
 @mcp.tool()
@@ -73,7 +72,7 @@ def execute(
 ) -> str:
     """Run a command in an isolated container.
 
-    - /workspace: your project directory (READ-ONLY)
+    - /workspace: your project directory (READ-ONLY, working directory)
     - /persistent: writable volume that survives across calls within the same session_id
 
     Pick an image appropriate for the task:
@@ -98,7 +97,3 @@ def execute_writable(
     Same options as the execute mcp call.
     """
     return _run_cmd(command, image, writable=True, ctx=ctx)
-
-
-if __name__ == "__main__":
-    mcp.run()

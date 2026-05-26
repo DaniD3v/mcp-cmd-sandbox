@@ -3,3 +3,10 @@ name = "mcp-cmd-sandbox"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = ["fastmcp", "python-on-whales"]
+
+[build-system]
+requires = ["uv_build>=0.6.6"]
+build-backend = "uv_build"
+
+[project.scripts]
+mcp-cmd-sandbox = "mcp_cmd_sandbox:main"
