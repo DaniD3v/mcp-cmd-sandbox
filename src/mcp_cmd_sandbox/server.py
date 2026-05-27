@@ -1,7 +1,6 @@
 """MCP server for isolated container execution via Docker/Podman."""
 
 import argparse
-import sys
 import uuid
 from pathlib import Path
 
@@ -70,7 +69,7 @@ def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
         workdir="/workspace",
         detach=True,
     ) as container:
-        client.container.wait(container)
+        _ = client.wait(container)
         return container.logs()
 
 
