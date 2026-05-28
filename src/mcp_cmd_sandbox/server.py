@@ -77,12 +77,12 @@ def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
     description=f"""
         Run a command in an isolated container.
 
-        - /workspace: your project directory ({"overlay mount, writes discarded on exit" if _IS_PODMAN else "read-only"})
-        - /persistent: writable volume that survives across calls within the same session_id
+        - /workspace (active working directory, no cd necessary): project directory ({"overlay mount, writes discarded on exit" if _IS_PODMAN else "read-only"})
+        - /persistent: writable volume that survives across calls
 
         Pick an image appropriate for the task:
-          debian:latest (default), rust:latest, python:3.12-slim,
-          gcc:latest, node:22-alpine, golang:latest, maven:latest
+          debian (default), rust, python, gcc,
+          astral/uv, node, golang, maven
 
         Use /persistent for build caches or artifacts across multiple calls.
         See the execute_writable call for a writable workspace.
@@ -98,11 +98,11 @@ def execute(
 def execute_writable(
     command: str, image: str = "debian:latest", ctx: Context = CurrentContext()
 ) -> str:
-    """Run a command with write access to /workspace in an isolated container.
+    """
+    Run a command with write access to /workspace in an isolated container.
+    Identical options as the `execute` mcp call.
 
-    Only use this when you need to modify files on the host (sed -i, patch, writing build output, etc.).
-    Prefer the read-only 'execute' tool unless modification is required.
-
-    Same options as the execute mcp call.
+    Only use this when the modification of project files is the main goal (sed -i, applying a patch, etc).
+    Do not use this when certain commands try to write as a side effect (cargo build, uv publish, etc).
     """
     return _run_cmd(command, image, writable=True, ctx=ctx)
