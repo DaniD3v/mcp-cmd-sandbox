@@ -21,44 +21,60 @@ Security by design:
 Requires the docker or podman commands to be installed.
 
 ```
-uv pip install -e .
+uvx mcp-cmd-sandbox
 ```
 
 ## Integration
 
 ### OpenCode
 
+Install the mcp server by running the command:
 ```
-opencode mcp add mcp-cmd-sandbox -- python /path/to/mcp-shell-sandbox/server.py
+opencode mcp add
+  > Name: cmd-sandbox
+  > Type: Local
+  > Command: uvx mcp-cmd-sandbox
 ```
 
-To disable the builtin shell tool, add to your `opencode.json`:
-
+or by editing your `opencode.json`:
 ```json
 {
   "mcp": {
-    "mcp-cmd-sandbox": {
-      "command": "python",
-      "args": ["/path/to/mcp-shell-sandbox/server.py"]
+    "cmd-sandbox": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "mcp-cmd-sandbox"
+      ]
     }
-  },
-  "permissions": {
-    "deny": ["shell"]
   }
+}
+```
+
+To replace the builtin Bash tool and set correct permissions, add this to your `opencode.json`:
+```json
+{
+  "tools": {
+    "bash": false
+  }
+  "permission": {
+    "cmd-sandbox_execute_writable": "ask"
+  },
 }
 ```
 
 ### Claude Code
 
+Install the mcp server with the command:
 ```
-claude mcp add mcp-cmd-sandbox -- python /path/to/mcp-shell-sandbox/server.py
+claude mcp add cmd-sandbox -- uvx mcp-cmd-sandbox
 ```
 
-To replace the builtin Bash tool, add to your project's `.claude/settings.json`:
-
+To replace the builtin Bash tool and set correct permissions, add this to your `opencode.json`:
 ```json
 {
   "permissions": {
+    "allow": ["mcp__cmd-sandbox__execute"],
     "deny": ["Bash"]
   }
 }
