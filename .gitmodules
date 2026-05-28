@@ -1,0 +1,3 @@
+[submodule "krun-custom-kernel"]
+	path = krun-custom-kernel
+	url = git@github.com:DaniD3v/libkrunfw-dind.git
