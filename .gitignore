@@ -1,1 +1,2 @@
 __pycache__
+src/mcp_cmd_sandbox/lib/*.so*

@@ -16,13 +16,28 @@ It is supposed to replace the built-in bash tool with a more secure and usable a
   - a library for docker/podman access -> no goofy command injections
   - no --privileged bs. the ai can only set the command and the image
 
-## Install
+# microVM support
+
+When `krun` is in PATH, commands can be executed in vm-mode.
+This allows the ai to run tasks a standard (rootless) container couldn't:
+  - docker compose
+  - loop/FUSE mounts
+  - k8s
+
+# Install
 
 Requires the `docker`/`podman` command to be installed.
 
 ```
 uvx mcp-cmd-sandbox
 ```
+
+## Installing `krun`
+
+Installing `krun` is optional, but recommended as it allows the ai to run commands like docker compose.
+`krun` comes with `crun`. If it is not installed yet, update your crun package.
+
+> You have to restart the mcp server for the changes to take effect.
 
 ## Integration
 
