@@ -1,4 +1,4 @@
-from mcp_cmd_sandbox.server import mcp
+from .mcp import mcp
 
 
 def main():
