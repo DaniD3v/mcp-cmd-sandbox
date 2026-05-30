@@ -102,7 +102,11 @@ def _run_cmd(command: str, image: str, writable: bool, vm: bool, ctx: Context) -
             ["-c", command],
             entrypoint="/bin/sh",
             volumes=[
-                (cwd, "/workspace", "rw" if writable else ("O" if _IS_PODMAN else "ro")),
+                (
+                    cwd,
+                    "/workspace",
+                    "rw" if writable else ("O" if _IS_PODMAN else "ro"),
+                ),
                 (volume, "/persistent", "rw"),
             ],
             workdir="/workspace",
