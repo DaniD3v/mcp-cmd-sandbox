@@ -61,7 +61,8 @@ def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
 
     with client.run(
         image,
-        ["sh", "-c", command],
+        ["-c", command],
+        entrypoint="/bin/sh",
         volumes=[
             (cwd, "/workspace", "rw" if writable else ("O" if _IS_PODMAN else "ro")),
             (volume, "/persistent", "rw"),
@@ -81,8 +82,8 @@ def _run_cmd(command: str, image: str, writable: bool, ctx: Context) -> str:
         - /persistent: writable volume that survives across calls
 
         Pick an image appropriate for the task:
-          debian (default), rust, python, gcc,
-          astral/uv, node, golang, maven
+          debian (default), rust, python, gcc, node,
+          astral/uv, alpine/git, golang, maven
 
         Use /persistent for build caches or artifacts across multiple calls.
         See the execute_writable call for a writable workspace.
