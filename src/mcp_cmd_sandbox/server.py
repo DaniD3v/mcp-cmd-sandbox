@@ -86,7 +86,9 @@ def get_session_volume(ctx: Context):
 mcp = FastMCP("mcp-cmd-sandbox", lifespan=remove_sessions)
 
 
-def _run_cmd(command: str, image: str, writable: bool, vm: bool, ctx: Context) -> str:
+def _run_cmd(
+    command: str, image: str, writable: bool, vm: bool, ctx: Context
+) -> dict[str, str | int]:
     assert not vm or _KRUN_AVAILABLE, (
         "`vm=True` should only be used when krun is available"
     )
@@ -113,10 +115,11 @@ def _run_cmd(command: str, image: str, writable: bool, vm: bool, ctx: Context) -
             detach=True,
             runtime=str(_KRUN_WRAPPER) if vm else None,
         ) as container:
-            _ = client.wait(container)
-            return container.logs()
+            exit_code = client.wait(container)
+            return {"output": container.logs(), "exit_code": exit_code}
+
     except DockerException as e:
-        return f"Error: {e}"
+        return {"error": str(e)}
 
 
 # Tool call descriptions embed runtime values (_IS_PODMAN, _KRUN_AVAILABLE) only known at startup,
@@ -173,7 +176,7 @@ if _KRUN_AVAILABLE:
         image: str = "debian:latest",
         vm: bool = False,
         ctx: Context = CurrentContext(),
-    ) -> str:
+    ) -> dict[str, str | int]:
         return _run_cmd(command, image, writable=False, vm=vm, ctx=ctx)
 
     @mcp.tool(description=_writable_desc)
@@ -182,18 +185,18 @@ if _KRUN_AVAILABLE:
         image: str = "debian:latest",
         vm: bool = False,
         ctx: Context = CurrentContext(),
-    ) -> str:
+    ) -> dict[str, str | int]:
         return _run_cmd(command, image, writable=True, vm=vm, ctx=ctx)
 else:
 
     @mcp.tool(description=_execute_desc)
     def execute(
         command: str, image: str = "debian:latest", ctx: Context = CurrentContext()
-    ) -> str:
+    ) -> dict[str, str | int]:
         return _run_cmd(command, image, writable=False, vm=False, ctx=ctx)
 
     @mcp.tool(description=_writable_desc)
     def execute_writable(
         command: str, image: str = "debian:latest", ctx: Context = CurrentContext()
-    ) -> str:
+    ) -> dict[str, str | int]:
         return _run_cmd(command, image, writable=True, vm=False, ctx=ctx)

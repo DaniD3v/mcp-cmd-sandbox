@@ -8,4 +8,6 @@ persistent session
 
 # Low Priority:
 
+error handling: explicitly pull image before run to capture stderr and give better error messages
+error handling: improve DockerException handling to surface useful error details
 uid mapping: settings a specific uid wouldn't work on podman due to permissions
