@@ -11,6 +11,7 @@ from fastmcp import Context, FastMCP
 from fastmcp.dependencies import CurrentContext
 from fastmcp.server.lifespan import Lifespan
 from python_on_whales import DockerClient
+from python_on_whales.exceptions import DockerException
 
 _parser = ArgumentParser(prog="mcp-cmd-sandbox")
 _ = _parser.add_argument(
@@ -95,20 +96,23 @@ def _run_cmd(command: str, image: str, writable: bool, vm: bool, ctx: Context) -
     # this should be the pwd of the agent tool, not the mcp server
     cwd = str(Path.cwd())
 
-    with client.run(
-        image,
-        ["-c", command],
-        entrypoint="/bin/sh",
-        volumes=[
-            (cwd, "/workspace", "rw" if writable else ("O" if _IS_PODMAN else "ro")),
-            (volume, "/persistent", "rw"),
-        ],
-        workdir="/workspace",
-        detach=True,
-        runtime=str(_KRUN_WRAPPER) if vm else None,
-    ) as container:
-        _ = client.wait(container)
-        return container.logs()
+    try:
+        with client.run(
+            image,
+            ["-c", command],
+            entrypoint="/bin/sh",
+            volumes=[
+                (cwd, "/workspace", "rw" if writable else ("O" if _IS_PODMAN else "ro")),
+                (volume, "/persistent", "rw"),
+            ],
+            workdir="/workspace",
+            detach=True,
+            runtime=str(_KRUN_WRAPPER) if vm else None,
+        ) as container:
+            _ = client.wait(container)
+            return container.logs()
+    except DockerException as e:
+        return f"Error: {e}"
 
 
 # Tool call descriptions embed runtime values (_IS_PODMAN, _KRUN_AVAILABLE) only known at startup,
