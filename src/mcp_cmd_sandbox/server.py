@@ -1,9 +1,9 @@
 """MCP server for isolated container execution via Docker/Podman."""
 
-import argparse
-import shutil
-import tempfile
-import uuid
+from argparse import ArgumentParser
+from shutil import which
+from tempfile import NamedTemporaryFile
+from uuid import UUID, uuid4, uuid5
 from pathlib import Path
 from inspect import cleandoc
 
@@ -12,7 +12,7 @@ from fastmcp.dependencies import CurrentContext
 from fastmcp.server.lifespan import Lifespan
 from python_on_whales import DockerClient
 
-_parser = argparse.ArgumentParser(prog="mcp-cmd-sandbox")
+_parser = ArgumentParser(prog="mcp-cmd-sandbox")
 _ = _parser.add_argument(
     "container_binary",
     nargs="*",
@@ -21,12 +21,12 @@ _ = _parser.add_argument(
 )
 _args = _parser.parse_args()
 
-_SERVER_ID = uuid.uuid4()
+_SERVER_ID = uuid4()
 _IS_PODMAN = "podman" in _args.container_binary[0]
 
 # krun microVM runtime support — full kernel enables docker-compose, loop/FUSE mounts, etc.
 # libkrunfw.so ships as package data in lib/; the wrapper sets LD_LIBRARY_PATH before execing krun.
-_KRUN_PATH = shutil.which("krun")
+_KRUN_PATH = which("krun")
 _KRUN_AVAILABLE = _KRUN_PATH is not None
 
 # The wrapper must be generated at runtime with the absolute krun path baked in because:
@@ -35,7 +35,7 @@ _KRUN_AVAILABLE = _KRUN_PATH is not None
 if _KRUN_AVAILABLE:
     _lib_dir = Path(__file__).parent / "lib"
 
-    with tempfile.NamedTemporaryFile(
+    with NamedTemporaryFile(
         mode="w", prefix="krun-wrapper-", delete=False
     ) as wrapper_file:
         _ = wrapper_file.write(
@@ -48,7 +48,7 @@ if _KRUN_AVAILABLE:
         _KRUN_WRAPPER = Path(wrapper_file.name)
     _KRUN_WRAPPER.chmod(0o755)
 
-volumes: dict[uuid.UUID, str] = {}
+volumes: dict[UUID, str] = {}
 client = DockerClient(client_call=_args.container_binary)
 
 
@@ -72,7 +72,7 @@ async def remove_sessions(_):
 
 
 def get_session_volume(ctx: Context):
-    id = uuid.uuid5(_SERVER_ID, ctx.session_id)
+    id = uuid5(_SERVER_ID, ctx.session_id)
     volume_name = f"mcp-cmd-sandbox-persistant-{id}"
 
     if id not in volumes.keys():
@@ -117,7 +117,7 @@ _workspace_mount_mode = (
     "overlay mount, writes discarded on exit" if _IS_PODMAN else "read-only"
 )
 _vm_note = (
-    """
+    cleandoc("""
         `vm=True` runs the container in a microVM (full kernel available).
         Only use this to run tasks a standard (rootless) container couldn't:
           - docker compose
@@ -125,37 +125,37 @@ _vm_note = (
           - k8s
 
         Do not use for ordinary tasks.
-    """.strip()
+    """)
     if _KRUN_AVAILABLE
     else ""
 )
 
 
-_execute_desc = f"""
-        Run a command in an isolated container.
+_execute_desc = cleandoc(f"""
+    Run a command in an isolated container.
 
-        - /workspace (active working directory, no cd necessary): project directory ({_workspace_mount_mode})
-        - /persistent: writable volume that survives across calls
+    - /workspace (active working directory, no cd necessary): project directory ({_workspace_mount_mode})
+    - /persistent: writable volume that survives across calls
 
-        Pick an image appropriate for the task:
-          debian (default), rust, python, gcc, node,
-          astral/uv, alpine/git, golang, maven
+    Pick an image appropriate for the task:
+      debian (default), rust, python, gcc, node,
+      astral/uv, alpine/git, golang, maven
 
-        Use /persistent for build caches or artifacts across multiple calls.
-        See the execute_writable call for a writable workspace.
+    Use /persistent for build caches or artifacts across multiple calls.
+    See the execute_writable call for a writable workspace.
 
-        {_vm_note}
-    """.strip()
+    {_vm_note}
+""")
 
-_writable_desc = """
-        Run a command with write access to /workspace in an isolated container.
+_writable_desc = cleandoc("""
+    Run a command with write access to /workspace in an isolated container.
 
-        Only use this when the modification of project files is the main goal (sed -i, applying a patch, etc).
-        Do not use this when certain commands try to write as a side effect (cargo build, uv publish, etc).
+    Only use this when the modification of project files is the main goal (sed -i, applying a patch, etc).
+    Do not use this when certain commands try to write as a side effect (cargo build, uv publish, etc).
 
-        Keep commands as small as possible — only the write operation itself. Move any reads, builds, or
-        checks into a separate execute call so the user can easily review what was actually modified.
-    """.strip()
+    Keep commands as small as possible — only the write operation itself. Move any reads, builds, or
+    checks into a separate execute call so the user can easily review what was actually modified.
+""")
 
 if _KRUN_AVAILABLE:
 
